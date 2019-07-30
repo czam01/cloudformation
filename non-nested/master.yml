@@ -1,0 +1,320 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Metadata:
+    AWS::CloudFormation::Interface:
+        ParameterGroups:
+            -
+                Label:
+                    default: 'Base de Datos Platzi-DynamoDB'
+                Parameters:
+                    - DynamoName
+                    - DynamoKey
+            -
+                Label:
+                    default: 'Función Lambda Platzi'
+                Parameters:
+                    - LambdaName
+                    - LambdaRuntime
+                    - LambdaBucket
+                    - ZipName
+        ParameterLabels:
+            DynamoName:
+                default: 'Ingrese el nombre de la tabla'
+            DynamoKey:
+                default: 'Ingrese el nombre de la Llave'
+            LambdaName:
+                default: 'Ingrese el nombre de la función lambda'
+            LambdaRuntime:
+                default: 'Seleccione el Runtimer de la función'
+            LambdaBucket:
+                default: 'Ingrese el nombre del bucket donde esta el código de la lambda'
+            ZipName:
+                default: 'Ingrese el nombre del .zip de la lambda'
+Parameters:
+    DynamoName:
+        Description: Nombre
+        Type: String
+    DynamoKey:
+        Description: Llave
+        Type: String
+    LambdaName:
+        Description: Llave
+        Type: String
+    LambdaRuntime:
+       Description: Runtime
+       Type: String
+       Default: python3.7
+       AllowedValues:
+            - python3.7
+            - python2.7
+            - ruby2.5
+            - nodejs8.10
+            - java8
+            - dotnetcore2.1
+    LambdaBucket:
+        Description: Bucket
+        Type: String
+    ZipName:
+        Description: Zip
+        Type: String 
+Resources:
+    DynamoPlatzi:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: !Ref DynamoName
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+        - AttributeName: !Ref DynamoKey
+          AttributeType: S
+        KeySchema:
+        - AttributeName: !Ref DynamoKey
+          KeyType: HASH
+        SSESpecification:
+          SSEEnabled: true
+    
+    RestApiAD:
+      Type: AWS::ApiGateway::RestApi
+      Properties:
+        Name: api-platzi
+    Method:
+      Type: AWS::ApiGateway::Method
+      DependsOn: DynamoPlatzi
+      Properties:
+        HttpMethod: POST
+        ResourceId: !GetAtt RestApiAD.RootResourceId
+        RestApiId: !Ref RestApiAD
+        AuthorizationType: NONE
+        MethodResponses:
+            - StatusCode: 200
+              ResponseModels: { "application/json": "Empty" }
+        Integration:
+          Type: AWS
+          IntegrationHttpMethod: "POST"
+          Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction}/invocations'
+          IntegrationResponses:
+            - StatusCode: 200
+              ResponseTemplates: {"application/json": "$input.json('$.body')"}
+        OperationName: !Sub ${AWS::AccountId}
+   
+    ApiGatewayResource:
+      Type: AWS::ApiGateway::Resource
+      DependsOn: DynamoPlatzi
+      Properties:
+        ParentId: !GetAtt RestApiAD.RootResourceId
+        PathPart: 'lambda'
+        RestApiId: !Ref RestApiAD
+
+    ApiGatewayModel:
+      Type: AWS::ApiGateway::Model
+      DependsOn: DynamoPlatzi
+      Properties:
+        ContentType: 'application/json'
+        RestApiId: !Ref RestApiAD
+        Schema: {}
+
+    ApiGatewayStage:
+        Type: AWS::ApiGateway::Stage
+        DependsOn: DynamoPlatzi
+        Properties:
+          DeploymentId: !Ref ApiGatewayDeployment
+          Description: Lambda API Stage v0
+          RestApiId: !Ref RestApiAD
+          StageName: 'v0'
+
+    ApiGatewayDeployment:
+      Type: AWS::ApiGateway::Deployment
+      DependsOn: Method
+      Properties:
+        Description: Lambda API Deployment
+        RestApiId: !Ref RestApiAD
+
+    ApiGatewayIamRole:
+      Type: AWS::IAM::Role
+      DependsOn: DynamoPlatzi
+      Properties:
+        AssumeRolePolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Sid: ''
+              Effect: 'Allow'
+              Principal:
+                Service:
+                  - 'apigateway.amazonaws.com'
+              Action:
+                - 'sts:AssumeRole'
+        Path: '/'
+        Policies:
+          - PolicyName: LambdaAccess
+            PolicyDocument:
+              Version: '2012-10-17'
+              Statement:
+                - Effect: 'Allow'
+                  Action: 'lambda:*'
+                  Resource: !ImportValue LambdaFunction
+
+    LambdaFunction:
+      Type: AWS::Lambda::Function
+      DependsOn: LambdaRole
+      Properties:
+        Code:
+            S3Bucket: !Ref LambdaBucket
+            S3Key: !Ref ZipName
+        FunctionName: !Ref LambdaName
+        Handler: lambda_function.lambda_handler
+        Runtime: !Ref LambdaRuntime
+        MemorySize: 512
+        Timeout: 600
+        Role: !GetAtt LambdaRole.Arn
+        Environment:
+            Variables:
+                DYNAMO_PLATZI: !ImportValue DynamoPlatzi
+
+    LambdaPolicyEC2:
+        Type: AWS::IAM::ManagedPolicy
+        DependsOn: DynamoPlatzi
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    -
+                      Effect: Allow
+                      Action:
+                          - ec2:DisassociateAddress
+                          - ec2:CreateDhcpOptions
+                          - ec2:ReplaceRouteTableAssociation
+                          - ec2:RunScheduledInstances
+                          - ec2:RequestSpotFleet
+                          - ec2:DisableVgwRoutePropagation
+                          - ec2:AssociateVpcCidrBlock
+                          - ec2:ReleaseHosts
+                          - ec2:ReplaceRoute
+                          - ec2:DisassociateVpcCidrBlock
+                          - ec2:DeleteNetworkInterfacePermission
+                          - ec2:DescribeNetworkInterfaces
+                          - ec2:StartInstances
+                          - ec2:DescribeNetworkInterfaceAttribute
+                          - ec2:CreateRoute
+                          - ec2:ReplaceNetworkAclEntry
+                          - ec2:CreateSecurityGroup
+                          - ec2:CreateNetworkAcl
+                          - ec2:DescribeNetworkInterfacePermissions
+                          - ec2:TerminateInstances
+                          - ec2:AcceptVpcEndpointConnections
+                          - ec2:DeleteNetworkInterface
+                          - ec2:CreateRouteTable
+                          - ec2:RunInstances
+                          - ec2:StopInstances
+                          - ec2:DisassociateRouteTable
+                          - ec2:DisassociateSubnetCidrBlock
+                          - ec2:ModifyHosts
+                          - ec2:ReplaceNetworkAclAssociation
+                          - ec2:CreateVolume
+                          - ec2:CreateNetworkInterface
+                          - ec2:DetachVpnGateway
+                          - ec2:CreateDefaultVpc
+                          - ec2:DisassociateIamInstanceProfile
+                          - ec2:CreateVpcEndpoint
+                          - ec2:DisableVpcClassicLink
+                          - ec2:CreateSubnet
+                      Resource:
+                          - "*"
+    LambdaPolicyDynamo:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    -
+                      Effect: Allow
+                      Action:
+                          - dynamodb:PutItem
+                          - dynamodb:UpdateItem
+                          - dynamodb:GetItem
+                          - dynamodb:*
+                      Resource:
+                          - "*"
+
+    LambdaPolicyCW:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    -
+                      Effect: Allow
+                      Action:
+                          - logs:*
+                          - cloudwatch:*
+                          - xray:*
+                      Resource:
+                          - "*"
+
+    LambdaRole:
+      Type: AWS::IAM::Role
+      Properties:
+        ManagedPolicyArns:
+          - !Ref LambdaPolicyDynamo
+          - !Ref LambdaPolicyEC2
+          - !Ref LambdaPolicyCW
+        AssumeRolePolicyDocument:
+          Version: 2012-10-17
+          Statement:
+            -
+              Effect: Allow
+              Principal:
+                Service:
+                  - lambda.amazonaws.com
+              Action:
+                - sts:AssumeRole
+        Path: /
+    LambdaPolicyS3:
+        Type: AWS::IAM::ManagedPolicy
+        Properties:
+            PolicyDocument:
+                Version: 2012-10-17
+                Statement:
+                    -
+                      Effect: Allow
+                      Action:
+                          - s3:ListAllMyBuckets
+                          - s3:HeadBucket
+                          - s3:ListObjects
+                      Resource:
+                          - "*"
+                    -
+                      Effect: Allow
+                      Action:
+                          - s3:*
+                      Resource:
+                          - "*"                          
+    lambdaApiGatewayInvoke:
+      Type: "AWS::Lambda::Permission"
+      DependsOn: LambdaFunction
+      Properties:
+        Action: "lambda:InvokeFunction"
+        FunctionName: !Ref "LambdaFunction"
+        Principal: "apigateway.amazonaws.com"
+        SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiAD}/*/POST/"
+
+
+Outputs:
+  LambdaPolicyDynamo:
+    Value: !Ref LambdaPolicyDynamo
+    Export:
+        Name: LambdaPolicyDynamo
+  LambdaPolicyEC2:
+    Value: !Ref LambdaPolicyEC2
+    Export:
+        Name: LambdaPolicyEC2
+  LambdaPolicyCW:
+    Value: !Ref LambdaPolicyCW
+    Export:
+        Name: LambdaPolicyCW
+  LambdaFunction:
+    Value: !GetAtt LambdaFunction.Arn
+    Export:
+        Name: LambdaFunction       
+  RootResourceId:
+    Value: !Ref RestApiAD
+    Export:
+      Name: RootResourceId
+
