@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Parameters:
+    LambdaFunction: 
+        Type: String
+Resources:
+  RestApiAD:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: api-platzi
+  Method:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      ResourceId: !GetAtt RestApiAD.RootResourceId
+      RestApiId: !Ref RestApiAD
+      AuthorizationType: NONE
+      MethodResponses:
+          - StatusCode: 200
+            ResponseModels: { "application/json": "Empty" }
+      Integration:
+        Type: AWS
+        IntegrationHttpMethod: "POST"
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction}/invocations'
+        IntegrationResponses:
+          - StatusCode: 200
+            ResponseTemplates: {"application/json": "$input.json('$.body')"}
+      OperationName: !Sub ${AWS::AccountId}
+ 
+  ApiGatewayResource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt RestApiAD.RootResourceId
+      PathPart: 'lambda'
+      RestApiId: !Ref RestApiAD
+
+  ApiGatewayModel:
+    Type: AWS::ApiGateway::Model
+    Properties:
+      ContentType: 'application/json'
+      RestApiId: !Ref RestApiAD
+      Schema: {}
+
+  ApiGatewayStage:
+      Type: AWS::ApiGateway::Stage
+      Properties:
+        DeploymentId: !Ref ApiGatewayDeployment
+        Description: Lambda API Stage v0
+        RestApiId: !Ref RestApiAD
+        StageName: 'v0'
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: Method
+    Properties:
+      Description: Lambda API Deployment
+      RestApiId: !Ref RestApiAD
+
+  ApiGatewayIamRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ''
+            Effect: 'Allow'
+            Principal:
+              Service:
+                - 'apigateway.amazonaws.com'
+            Action:
+              - 'sts:AssumeRole'
+      Path: '/'
+      Policies:
+        - PolicyName: LambdaAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: 'Allow'
+                Action: 'lambda:*'
+                Resource: !Ref LambdaFunction
+
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    DependsOn: RestApiAD
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !Ref "LambdaFunction"
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiAD}/*/POST/"
+
+Outputs:
+  RootResourceId:
+    Value: !Ref RestApiAD
+    Export:
+      Name: RootResourceId
+
