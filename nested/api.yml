@@ -24,7 +24,7 @@ Resources:
         Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction}/invocations'
         IntegrationResponses:
           - StatusCode: 200
-            ResponseTemplates: {"application/json": "$input.json('$.body')"}
+            ResponseTemplates: {"application/json": ""}
       OperationName: !Sub ${AWS::AccountId}
  
   ApiGatewayResource:
