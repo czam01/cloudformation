@@ -24,7 +24,7 @@ Resources:
         Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction}/invocations'
         IntegrationResponses:
           - StatusCode: 200
-            ResponseTemplates: {"application/json": "$input.json('$.body')"}
+            ResponseTemplates: {"application/json": ""}
       OperationName: !Sub ${AWS::AccountId}
  
   ApiGatewayResource:
@@ -79,6 +79,14 @@ Resources:
                 Action: 'lambda:*'
                 Resource: !ImportValue LambdaFunction
 
+  lambdaApiGatewayInvoke:
+    Type: "AWS::Lambda::Permission"
+    DependsOn: RestApiAD
+    Properties:
+      Action: "lambda:InvokeFunction"
+      FunctionName: !ImportValue LambdaFunction
+      Principal: "apigateway.amazonaws.com"
+      SourceArn: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiAD}/*/POST/"
 
 Outputs:
   RootResourceId:
