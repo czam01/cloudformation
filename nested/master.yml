@@ -80,12 +80,4 @@ Resources:
                 LambdaName: !Ref LambdaName
                 LambdaRuntime: !Ref LambdaRuntime
                 LambdaBucket: !Ref LambdaBucket  
-                ZipName: !Ref ZipName   
-    apilambda:
-        Type: "AWS::CloudFormation::Stack"
-        DependsOn: api
-        Properties:
-            TemplateURL: https://platzi-cloudformation.s3.us-east-2.amazonaws.com/api-lambda.yml
-            Parameters:
-                RestApiAD: !GetAtt api.Outputs.RootResourceId 
-                LambdaFunction: !GetAtt lambda.Outputs.LambdaFunction               
+                ZipName: !Ref ZipName           
