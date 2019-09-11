@@ -89,10 +89,10 @@ Resources:
         Integration:
           Type: AWS
           IntegrationHttpMethod: "POST"
-          Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction}/invocations'
+          Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LambdaFunction.Arn}/invocations"
           IntegrationResponses:
             - StatusCode: 200
-              ResponseTemplates: {"application/json": "$input.json('$.body')"}
+              ResponseTemplates: {"application/json": ""}
         OperationName: !Sub ${AWS::AccountId}
    
     ApiGatewayResource:
@@ -149,7 +149,7 @@ Resources:
               Statement:
                 - Effect: 'Allow'
                   Action: 'lambda:*'
-                  Resource: !ImportValue LambdaFunction
+                  Resource: !GetAtt LambdaFunction.Arn
 
     LambdaFunction:
       Type: AWS::Lambda::Function
@@ -166,7 +166,7 @@ Resources:
         Role: !GetAtt LambdaRole.Arn
         Environment:
             Variables:
-                DYNAMO_PLATZI: !ImportValue DynamoPlatzi
+                DYNAMO_PLATZI: !Ref DynamoPlatzi
 
     LambdaPolicyEC2:
         Type: AWS::IAM::ManagedPolicy
